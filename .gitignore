@@ -1,0 +1,16 @@
+__pycache__
+_data/labels
+_data/scans
+_data/first-dataset
+_data/adjusted-labels
+_data/_possibly_obsolete___CHECK
+_log
+_model
+.ipynb_checkpoints
+.unorganized
+Recreating Dataset
+notebooks
+_log
+_loc_runs
+_loc_model
+_loc_log
