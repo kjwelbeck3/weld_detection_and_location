@@ -147,7 +147,8 @@ train_fix3_full2000 = {
 
 # models = [train1_fix3_temp]
 # models = [train1_fix3]
-models = [train_fix3_full2000]
+# models = [train_fix3_full2000]
+models = [model_0]
 
 for model in models:
     train_model(**model)

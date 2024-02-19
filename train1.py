@@ -8,7 +8,8 @@ from Instseg_model import MultiLayerFastLocalGraphModelV2
 import torch.utils.data as data_utils
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
+import numpy as np
 
 def log(logfile=None, message=""):
     """
@@ -51,30 +52,60 @@ def plot_inference(predictions, points, cuda, title="", caption=""):
 
     return fig
 
-def plot_inference_loc(prediction, graph, cuda, title="", caption=""):
+def plot_inference_loc(prediction, graph, cuda, additional_pts=False, title="", caption=""):
     """
     Produce 2D matplotlib fig of graph points with prediction overlay 
     """
-    preds_cpu, points_cpu = None, None
+    preds_cpu, points_cpu, pool_pt_cpu = None, None, None
     points = graph["vertex_coord_list"][0]
+    pool_point = graph["vertex_coord_list"][-1]
+    
+    
+
     if cuda and torch.cuda.is_available():
         preds_cpu = prediction.cpu().detach().numpy()
         points_cpu = points.cpu().detach().numpy()
+        pool_pt_cpu = points.cpu().detach().numpy()
     else:
-        preds_cpu = prediction.detach().numpy()
-        points_cpu = points.detach().numpy()
+        if not isinstance(prediction, np.ndarray):
+            preds_cpu = prediction.detach().numpy()
+        else:
+            preds_cpu = prediction
+
+        if not isinstance(points, np.ndarray):
+            points_cpu = points.detach().numpy()
+            pool_pt_cpu = points.detach().numpy()
+
+        else:
+            points_cpu = points
+            pool_pt_cpu = pool_point
+ 
+    centroid = np.mean(points_cpu, axis=0)
+
+    # ## DEBUG TOKEN
+    # print("points", points_cpu)
+    # print("pool_point", pool_pt_cpu)
+    # print("centroid", centroid)
+
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    im = ax.scatter(points_cpu[:,0], points_cpu[:,1]) ## ,s=0.25, cmap = "Reds")
-    ax.scatter(preds_cpu[:,0], preds_cpu[:,1]) ## ,s=0.25,c=preds_cpu, cmap = "Reds")
+    im = ax.scatter(points_cpu[:,0], points_cpu[:,1], color="blue", label="point cloud") ## ,s=0.25, cmap = "Reds")
+    ax.scatter(preds_cpu[:,0], preds_cpu[:,1], color="black", label="prediction") ## ,s=0.25,c=preds_cpu, cmap = "Reds")
+
+    if additional_pts:
+        ax.scatter(pool_point[:, 0], pool_point[:, 1], color="yellow", label="pool point", marker="D")
+        ax.scatter(centroid[0], centroid[1], color="green", label="centroid", marker="X" )
+
     ax.set_aspect(1)
     ax.set_title(title)
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("y [mm]")
+    # ax
 
-    legend = ax.legend(*im.legend_elements(), bbox_to_anchor=(1.1, 1), loc="upper right" )
-    ax.add_artist(legend)
+    # legend = ax.legend(*im.legend_elements(), bbox_to_anchor=(1.1, 1), loc="upper right" )
+    # ax.add_artist(legend)
+    ax.legend(bbox_to_anchor=(1.1, 1), loc="upper right")
 
     ax.text(0.5, -0.25, caption, style='italic', \
 		horizontalalignment='center', verticalalignment='top', transform=ax.transAxes)

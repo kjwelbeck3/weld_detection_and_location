@@ -201,18 +201,25 @@ class PointSetPooling(nn.Module):
         src_set_coordinates = point_coordinates[set_indices[:, 0]]  ## S x 3
         dest_set_keypoint_indices = keypoint_indices[set_indices[:, 1]]  ## S x 1
         dest_set_coordinates = point_coordinates[dest_set_keypoint_indices[:, 0]]  ## S x 3 
-
+        
+        
         ## Step 2: Packages edges as free discplacment vectors  
         displacement_vectors = src_set_coordinates - dest_set_coordinates   ## S x 3
         
+        
         ## Step 3: Extract/Expand features from Edges
         extracted_features = self.point_linears(displacement_vectors)  ## S x 300
+        
 
         ## Step 4: Max Pool Features from Upstream layer to Downstream layer along edges
         set_features = max_aggregation_fn(extracted_features, set_indices[:, 1], keypoint_indices.shape[0])
+        
 
         # Step 5: Update Downstream (ie Keypoint) features 
         dest_set_features = self.out_linears(set_features)
+        
+
+
         return dest_set_features
     
     

@@ -402,8 +402,10 @@ def train_model(nametag, model, dataset_root="./_data/", log_root="./_log/", bat
 def train_loc_model(
     nametag, model, train_data_dir, test_data_dir, model_params_path=None,
     batch_size=1, learning_rate=1e-4, reg_constant= 10, epochs=150, 
+    MSE_centroid_coeff=1, MSE_label_coeff=1, MSE_poolpt_coeff=1,
     draw_list=[0,1,2,3,4], draw_frequency=20, save_frequency=10,
-    cuda=True, debug=False, track_losses=True, 
+    cuda=True, debug=False, track_losses=True, testing_sample_size=None,
+    scaling="zero-at-min--no-scaling", output_scaling=None, loss_version=1, 
     log_root="./_loc_log/", model_root="./_loc_model/", tensorboard_root="./_loc_runs/"):
 
     ## Printing Function Arguments
@@ -495,10 +497,10 @@ def train_loc_model(
         assert os.path.isdir(train_data_dir) , "Specified Training Data Directory does not exist."
         assert os.path.isdir(test_data_dir) , "Specified Test Data Directory does not exist."
         
-        train_dataloader, test_dataloader = setupDataLoaders(train_data_dir, test_data_dir, logfile=_logfile )
+        train_dataloader, test_dataloader = setupDataLoaders(train_data_dir, test_data_dir, logfile=_logfile, scaling=scaling )
 
         ## - Loss Function and Optimizer
-        loss_fn, optimizer = setupLocRegOptimizer(model, learning_rate=learning_rate, reg_constant=reg_constant, logfile=_logfile)
+        loss_fn, optimizer = setupLocRegOptimizer(model,loss_version=loss_version, learning_rate=learning_rate, reg_constant=reg_constant, logfile=_logfile)
     
     ## Running Epochs of training and testing 
     if True:
@@ -513,7 +515,7 @@ def train_loc_model(
 
         ## To save the minimum-test-loss model parameters
         min_test_loss_model_params = None
-        min_test_loss = 10000
+        min_test_loss = torch.inf
         min_test_loss_epoch = None
         min_test_loss_training_loss = 0
         
@@ -522,20 +524,36 @@ def train_loc_model(
         for t in range(epochs):
             # print(f"Epoch {t+1}\n-------------------------------")
             log(_logfile, message=f"Epoch {t+1}\n-------------------------------")
-            # train_loss = train(train_dataloader, model, loss_fn, optimizer, logfile=_logfile)
-            train_loss = batch_train(train_dataloader, 20, model, loss_fn, optimizer, logfile=_logfile)
+            train_loss, nominal_loss = train(train_dataloader, model, loss_fn, optimizer, 
+                                        MSE_centroid_coeff, MSE_label_coeff, MSE_poolpt_coeff, 
+                                        logfile=_logfile, testing_sample_size=testing_sample_size, 
+                                        output_scaling=output_scaling,
+                                        loss_version=loss_version)
+            # train_loss = batch_train(train_dataloader, 20, model, loss_fn, optimizer, logfile=_logfile)
             writer.add_scalar('Loss/train/', train_loss, t)
+            writer.add_scalar('NominalLoss/train/', nominal_loss, t)
             
             test_loss = 0
             if test_dataloader:    
                 if t % draw_frequency == 0: 
-                    test_loss, plots = test(test_dataloader, model, loss_fn, logfile=_logfile, epoch=t, return_plots=True, draw_list_by_idx=draw_list)
+                    test_loss, test_nominal_loss, plots = test(test_dataloader, model, loss_fn, logfile=_logfile, epoch=t, return_plots=True, draw_list_by_idx=draw_list, testing_sample_size=testing_sample_size,
+                                                    MSE_label_coeff=MSE_label_coeff,
+                                                    MSE_centroid_coeff=MSE_centroid_coeff,
+                                                    MSE_poolpt_coeff=MSE_poolpt_coeff,
+                                                    loss_version=loss_version,
+                                                    output_scaling=output_scaling)
                     for draw_idx, plot in enumerate(plots):
                         writer.add_figure(f"test/samples/{draw_list[draw_idx]}", plot, t)
                 else:
-                    test_loss = test(test_dataloader, model, loss_fn, logfile=_logfile)                                
-
+                    # test_loss = test(test_dataloader, model, loss_fn, logfile=_logfile)                                
+                    test_loss = test(test_dataloader, model, loss_fn, logfile=_logfile, epoch=t, return_plots=False, draw_list_by_idx=draw_list, testing_sample_size=testing_sample_size,
+                                                    MSE_label_coeff=MSE_label_coeff,
+                                                    MSE_centroid_coeff=MSE_centroid_coeff,
+                                                    MSE_poolpt_coeff=MSE_poolpt_coeff,
+                                                    loss_version=loss_version,
+                                                    output_scaling=output_scaling)
                 writer.add_scalar('Loss/test/', train_loss, t)
+                writer.add_scalar('NominalLoss/test/', test_nominal_loss, t)
 
                 if test_loss < min_test_loss:
                     min_test_loss = test_loss
@@ -578,10 +596,10 @@ def train_loc_model(
             log(_logfile, f"[{timestamp}]:  - train_loss = {min_test_loss_training_loss}") 
             log(_logfile, f"[{timestamp}]:  - test_loss = {min_test_loss}") 
 
-            model.load_state_dict(min_test_loss_model_params)
-            test_loss, plots = test(test_dataloader, model, loss_fn, logfile=_logfile, return_plots=True, draw_list_by_idx=draw_list)
-            for draw_idx, plot in enumerate(plots):
-                writer.add_figure(f"test/samples/{draw_list[draw_idx]}", plot, t)
+            # model.load_state_dict(min_test_loss_model_params)
+            # test_loss, plots = test(test_dataloader, model, loss_fn, logfile=_logfile, return_plots=True, draw_list_by_idx=draw_list)
+            # for draw_idx, plot in enumerate(plots):
+            #     writer.add_figure(f"test/samples/{draw_list[draw_idx]}", plot, t)
 
 
         training_end = datetime.now()
